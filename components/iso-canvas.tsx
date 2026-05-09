@@ -16,8 +16,7 @@ import {
   getCharacterPath,
   isCharacterId,
 } from "@/lib/characters";
-import { BUILDING_DEFS, BuildingKind, isBuildableTile } from "@/lib/game/buildings";
-import type { Building } from "@/lib/game/types";
+import { BUILDING_DEFS, BuildingKind } from "@/lib/game/buildings";
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
@@ -229,19 +228,39 @@ export default function IsoCanvas() {
     const bg = bgRef.current?.getContext("2d");
     if (!bg) return;
     bg.clearRect(0, 0, canvasWidth, canvasHeight);
+
+    if (gameMode === "play") {
+      const buildingByCell = new Map<string, BuildingKind>();
+      for (const b of buildings) {
+        buildingByCell.set(`${b.x}:${b.y}`, b.kind);
+      }
+      // Iterate cells in iso back-to-front order (smaller i+j drawn first).
+      const cells: Array<{ i: number; j: number }> = [];
+      for (let i = 0; i < gridSize; i++) {
+        for (let j = 0; j < gridSize; j++) {
+          cells.push({ i, j });
+        }
+      }
+      cells.sort((a, b) => a.i + a.j - (b.i + b.j));
+
+      for (const { i, j } of cells) {
+        const buildingKind = buildingByCell.get(`${i}:${j}`);
+        if (buildingKind) {
+          // Tile swap: building replaces editor tile in the same plane.
+          drawBuildingAt(bg, i, j, buildingKind, 1);
+        } else {
+          drawImageTile(bg, i, j, map[i][j][0], map[i][j][1], map[i][j][2]);
+          drawCharacterTile(bg, i, j, characterMap[i][j]);
+        }
+      }
+      return;
+    }
+
+    // Editor mode: original row-major iteration.
     for (let i = 0; i < gridSize; i++) {
       for (let j = 0; j < gridSize; j++) {
         drawImageTile(bg, i, j, map[i][j][0], map[i][j][1], map[i][j][2]);
         drawCharacterTile(bg, i, j, characterMap[i][j]);
-      }
-    }
-
-    if (gameMode === "play") {
-      const sorted: Building[] = [...buildings].sort(
-        (a, b) => a.x + a.y - (b.x + b.y),
-      );
-      for (const b of sorted) {
-        drawBuildingAt(bg, b.x, b.y, b.kind, 1);
       }
     }
   }, [
@@ -374,10 +393,9 @@ export default function IsoCanvas() {
       if (gameMode === "play" && placementMode) {
         const occupied = buildings.some((b) => b.x === x && b.y === y);
         const isDemolish = placementMode === "demolish";
-        const buildable = isBuildableTile(map[x][y]);
-        const valid = isDemolish ? occupied : !occupied && buildable;
+        const valid = isDemolish ? occupied : !occupied;
 
-        if (placementMode !== "demolish" && !occupied && buildable) {
+        if (placementMode !== "demolish" && !occupied) {
           drawBuildingAt(ctx, x, y, placementMode, 0.55);
         }
         ctx.save();
@@ -394,10 +412,11 @@ export default function IsoCanvas() {
         ctx.strokeStyle = valid
           ? "rgba(40,180,40,0.85)"
           : "rgba(220,40,40,0.85)";
-        if ((isDemolish && occupied) || (!isDemolish && !valid)) {
-          ctx.fillStyle = isDemolish
-            ? "rgba(220,40,40,0.25)"
-            : "rgba(220,40,40,0.18)";
+        if (isDemolish && occupied) {
+          ctx.fillStyle = "rgba(220,40,40,0.25)";
+          ctx.fill();
+        } else if (!isDemolish && occupied) {
+          ctx.fillStyle = "rgba(220,40,40,0.18)";
           ctx.fill();
         }
         ctx.lineWidth = 2;
@@ -429,7 +448,6 @@ export default function IsoCanvas() {
       placementMode,
       buildings,
       drawBuildingAt,
-      map,
       originX,
       originY,
       tileWidth,
@@ -470,9 +488,7 @@ export default function IsoCanvas() {
         return;
       }
       if (placementMode) {
-        if (placementMode === "demolish" || isBuildableTile(map[pos.x][pos.y])) {
-          placeBuilding(pos.x, pos.y);
-        }
+        placeBuilding(pos.x, pos.y);
       }
       return;
     }
@@ -554,9 +570,7 @@ export default function IsoCanvas() {
 
     if (gameMode === "play") {
       if (placementMode) {
-        if (placementMode === "demolish" || isBuildableTile(map[pos.x][pos.y])) {
-          placeBuilding(pos.x, pos.y);
-        }
+        placeBuilding(pos.x, pos.y);
       }
       return;
     }
