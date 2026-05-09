@@ -172,7 +172,7 @@ export default function IsoCanvas() {
     [originX, originY, tileWidth, tileHeight],
   );
 
-  const drawBuildingShape = useCallback(
+  const drawBuildingAt = useCallback(
     (
       ctx: CanvasRenderingContext2D,
       x: number,
@@ -181,64 +181,16 @@ export default function IsoCanvas() {
       alpha: number,
     ) => {
       const def = BUILDING_DEFS[kind];
-      const cx = originX + (y - x) * (tileWidth / 2);
-      const cy = originY + (x + y) * (tileHeight / 2);
-      const w = tileWidth / 2;
-      const h = tileHeight / 2;
-      const blockH = 44;
-
-      ctx.save();
-      ctx.globalAlpha = alpha;
-
-      // left side
-      ctx.fillStyle = def.color;
-      ctx.beginPath();
-      ctx.moveTo(cx - w, cy + h);
-      ctx.lineTo(cx, cy + h * 2);
-      ctx.lineTo(cx, cy + h * 2 + blockH);
-      ctx.lineTo(cx - w, cy + h + blockH);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "rgba(0,0,0,0.25)";
-      ctx.fill();
-
-      // right side
-      ctx.fillStyle = def.color;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy + h * 2);
-      ctx.lineTo(cx + w, cy + h);
-      ctx.lineTo(cx + w, cy + h + blockH);
-      ctx.lineTo(cx, cy + h * 2 + blockH);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "rgba(0,0,0,0.1)";
-      ctx.fill();
-
-      // top diamond
-      ctx.fillStyle = def.color;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + w, cy + h);
-      ctx.lineTo(cx, cy + h * 2);
-      ctx.lineTo(cx - w, cy + h);
-      ctx.closePath();
-      ctx.fill();
-
-      // outline
-      ctx.strokeStyle = "rgba(0,0,0,0.4)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      // letter
-      ctx.fillStyle = "white";
-      ctx.font = "bold 18px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(def.short, cx, cy + h);
-
-      ctx.restore();
+      if (alpha < 1) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        drawImageTile(ctx, x, y, def.tileRow, def.tileCol);
+        ctx.restore();
+      } else {
+        drawImageTile(ctx, x, y, def.tileRow, def.tileCol);
+      }
     },
-    [originX, originY, tileWidth, tileHeight],
+    [drawImageTile],
   );
 
   const drawMap = useCallback(() => {
@@ -257,7 +209,7 @@ export default function IsoCanvas() {
         (a, b) => a.x + a.y - (b.x + b.y),
       );
       for (const b of sorted) {
-        drawBuildingShape(bg, b.x, b.y, b.kind, 1);
+        drawBuildingAt(bg, b.x, b.y, b.kind, 1);
       }
     }
   }, [
@@ -268,7 +220,7 @@ export default function IsoCanvas() {
     canvasHeight,
     drawImageTile,
     drawCharacterTile,
-    drawBuildingShape,
+    drawBuildingAt,
     gameMode,
     buildings,
   ]);
@@ -390,7 +342,7 @@ export default function IsoCanvas() {
         const occupied = buildings.some((b) => b.x === x && b.y === y);
         const isDemolish = placementMode === "demolish";
         if (placementMode !== "demolish" && !occupied) {
-          drawBuildingShape(ctx, x, y, placementMode, 0.55);
+          drawBuildingAt(ctx, x, y, placementMode, 0.55);
         }
         ctx.save();
         ctx.translate(
@@ -437,7 +389,7 @@ export default function IsoCanvas() {
       gameMode,
       placementMode,
       buildings,
-      drawBuildingShape,
+      drawBuildingAt,
       originX,
       originY,
       tileWidth,

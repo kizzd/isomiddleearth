@@ -37,24 +37,24 @@ function GameOverModal() {
             {isVictory ? (
               <>
                 <Trophy className="h-6 w-6 text-amber-500" />
-                Wygrana!
+                Party at Bag End!
               </>
             ) : (
               <>
                 <Skull className="h-6 w-6 text-rose-600" />
-                Koniec gry
+                Hobbiton opustoszało
               </>
             )}
           </DialogTitle>
           <DialogDescription className="text-base">
             {isVictory
-              ? `Twoja osada osiągnęła ${population} mieszkańców w ${day} dni. Brawo!`
-              : `Twoja osada upadła w ${day}. dniu — populacja spadła do zera.`}
+              ? `${population} hobbitów zebrało się w Hobbiton dnia ${day}. Pora otworzyć fajeczkę i nakarmić Gandalfa fajerwerkami!`
+              : `Dnia ${day} ostatni hobbit spakował tobołek i odszedł na wschód. Spróbuj jeszcze raz, mistrzu burmistrzu.`}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button onClick={reset} className="w-full" size="lg">
-            Zacznij od nowa
+            Nowa osada
           </Button>
         </DialogFooter>
       </DialogContent>

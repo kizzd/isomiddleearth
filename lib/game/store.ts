@@ -20,6 +20,8 @@ import {
 } from "@/lib/game/types";
 import { BUILDING_DEFS, BuildingKind } from "@/lib/game/buildings";
 
+type PlacementMode = BuildingKind | "demolish" | null;
+
 interface GameStore extends GameState {
   setMode: (mode: GameMode) => void;
   setSpeed: (speed: GameSpeed) => void;
@@ -33,8 +35,6 @@ interface GameStore extends GameState {
   placeBuilding: (x: number, y: number) => boolean;
   removeBuildingAt: (x: number, y: number) => void;
 }
-
-type PlacementMode = BuildingKind | "demolish" | null;
 
 const buildInitialState = (): GameState => ({
   mode: "editor",
@@ -51,10 +51,13 @@ const buildInitialState = (): GameState => ({
   placementMode: null,
 });
 
-const clampResource = (id: ResourceId, value: number, caps: GameState["caps"]) => {
+const clampResource = (
+  id: ResourceId,
+  value: number,
+  caps: GameState["caps"],
+) => {
   if (id === "gold") return Math.max(0, value);
-  const cap = caps[id];
-  return Math.max(0, Math.min(cap, value));
+  return Math.max(0, Math.min(caps[id], value));
 };
 
 const hasResources = (resources: ResourceBag, cost: Partial<ResourceBag>) =>
@@ -80,16 +83,41 @@ const computeHousing = (buildings: Building[]) =>
     0,
   );
 
-const computeProduction = (buildings: Building[]): Partial<ResourceBag> => {
-  const out: Partial<ResourceBag> = {};
+interface BuildingsImpact {
+  food: number;
+  wood: number;
+  gold: number;
+  moodPerTick: number;
+}
+
+const computeBuildingsImpact = (buildings: Building[]): BuildingsImpact => {
+  let food = 0;
+  let wood = 0;
+  let gold = 0;
+  let moodPerTick = 0;
+  let foodMultiplier = 1;
+
   for (const b of buildings) {
-    const prod = BUILDING_DEFS[b.kind].production;
-    if (!prod) continue;
-    for (const id of Object.keys(prod) as ResourceId[]) {
-      out[id] = (out[id] ?? 0) + (prod[id] ?? 0);
+    const def = BUILDING_DEFS[b.kind];
+    if (def.production) {
+      food += def.production.food ?? 0;
+      wood += def.production.wood ?? 0;
+      gold += def.production.gold ?? 0;
+    }
+    if (def.foodMultiplier && def.foodMultiplier > foodMultiplier) {
+      foodMultiplier = def.foodMultiplier;
+    }
+    if (def.moodPerTick) {
+      moodPerTick += def.moodPerTick;
     }
   }
-  return out;
+
+  return {
+    food: food * foodMultiplier,
+    wood,
+    gold,
+    moodPerTick,
+  };
 };
 
 const newBuildingId = () =>
@@ -147,26 +175,21 @@ export const useGameStore = create<GameStore>()(
         const nextDay = Math.floor(nextTick / TICKS_PER_DAY) + 1;
         const dayChanged = nextDay !== state.day;
 
-        const production = computeProduction(state.buildings);
+        const impact = computeBuildingsImpact(state.buildings);
         const foodConsumption = state.population * FOOD_PER_POP_PER_TICK;
 
         const nextResources: ResourceBag = {
           food: clampResource(
             "food",
-            state.resources.food - foodConsumption + (production.food ?? 0),
+            state.resources.food - foodConsumption + impact.food,
             state.caps,
           ),
           wood: clampResource(
             "wood",
-            state.resources.wood + (production.wood ?? 0),
+            state.resources.wood + impact.wood,
             state.caps,
           ),
-          stone: clampResource(
-            "stone",
-            state.resources.stone + (production.stone ?? 0),
-            state.caps,
-          ),
-          gold: Math.max(0, state.resources.gold + (production.gold ?? 0)),
+          gold: Math.max(0, state.resources.gold + impact.gold),
         };
 
         let nextMood = state.mood;
@@ -174,8 +197,8 @@ export const useGameStore = create<GameStore>()(
           nextMood = Math.max(0, nextMood - 0.05);
         } else if (state.population > state.housing) {
           nextMood = Math.max(0, nextMood - 0.02);
-        } else if (nextMood < 100) {
-          nextMood = Math.min(100, nextMood + 0.01);
+        } else {
+          nextMood = Math.min(100, nextMood + 0.01 + impact.moodPerTick);
         }
 
         let nextPopulation = state.population;
@@ -287,7 +310,7 @@ export const useGameStore = create<GameStore>()(
       },
     }),
     {
-      name: "isoshire-game",
+      name: "isoshire-game-v2",
       partialize: (state) => ({
         mode: state.mode,
         speed: state.speed,
