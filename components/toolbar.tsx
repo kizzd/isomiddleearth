@@ -16,6 +16,7 @@ import {
   CodeIcon,
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
+import GameModeSwitch from "@/components/game-mode-switch";
 import {
   Dialog,
   DialogContent,
@@ -300,6 +301,8 @@ export default function Toolbar() {
           Iso Middle Earth
         </h1>
       </Link>
+
+      <GameModeSwitch />
 
       {/* Grid Size */}
       <Dialog>

@@ -1,0 +1,45 @@
+export type GameMode = "editor" | "play";
+export type GameStatus = "running" | "paused" | "gameOver" | "victory";
+export type GameSpeed = 1 | 2 | 4;
+
+export const TICK_MS = 1000;
+export const TICKS_PER_DAY = 240;
+
+export type ResourceId = "food" | "wood" | "stone" | "gold";
+
+export type ResourceBag = Record<ResourceId, number>;
+
+export interface ResourceCap {
+  food: number;
+  wood: number;
+  stone: number;
+}
+
+export interface GameState {
+  mode: GameMode;
+  status: GameStatus;
+  speed: GameSpeed;
+  tick: number;
+  day: number;
+  resources: ResourceBag;
+  caps: ResourceCap;
+  population: number;
+  housing: number;
+  mood: number;
+}
+
+export const INITIAL_RESOURCES: ResourceBag = {
+  food: 50,
+  wood: 50,
+  stone: 20,
+  gold: 0,
+};
+
+export const INITIAL_CAPS: ResourceCap = {
+  food: 200,
+  wood: 200,
+  stone: 100,
+};
+
+export const INITIAL_POPULATION = 3;
+export const INITIAL_MOOD = 100;
