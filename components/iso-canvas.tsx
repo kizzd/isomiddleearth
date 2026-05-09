@@ -462,6 +462,17 @@ export default function IsoCanvas() {
           const cells = target
             ? footprintCells(target.kind, target.x, target.y)
             : [{ x, y }];
+          const isLocked = target?.locked ?? false;
+          const fillStyle = !target
+            ? "rgba(150,150,150,0.15)"
+            : isLocked
+              ? "rgba(180,150,40,0.25)"
+              : "rgba(220,40,40,0.25)";
+          const strokeStyle = !target
+            ? "rgba(150,150,150,0.6)"
+            : isLocked
+              ? "rgba(180,150,40,0.9)"
+              : "rgba(220,40,40,0.85)";
           for (const c of cells) {
             ctx.save();
             ctx.translate(
@@ -474,15 +485,13 @@ export default function IsoCanvas() {
             ctx.lineTo(0, tileHeight);
             ctx.lineTo(-tileWidth / 2, tileHeight / 2);
             ctx.closePath();
-            ctx.fillStyle = target
-              ? "rgba(220,40,40,0.25)"
-              : "rgba(150,150,150,0.15)";
+            ctx.fillStyle = fillStyle;
             ctx.fill();
-            ctx.strokeStyle = target
-              ? "rgba(220,40,40,0.85)"
-              : "rgba(150,150,150,0.6)";
+            ctx.strokeStyle = strokeStyle;
             ctx.lineWidth = 2;
+            if (isLocked) ctx.setLineDash([6, 4]);
             ctx.stroke();
+            ctx.setLineDash([]);
             ctx.restore();
           }
           return;

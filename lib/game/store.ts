@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
+  BASE_BUILDING_ANCHOR_X,
+  BASE_BUILDING_ANCHOR_Y,
+  BASE_BUILDING_ID,
+  BASE_BUILDING_KIND,
   Building,
   FOOD_PER_POP_PER_TICK,
   GameMode,
@@ -40,20 +44,33 @@ interface GameStore extends GameState {
   removeBuildingAt: (x: number, y: number) => void;
 }
 
-const buildInitialState = (): GameState => ({
-  mode: "play",
-  status: "running",
-  speed: 1,
-  tick: 0,
-  day: 1,
-  resources: { ...INITIAL_RESOURCES },
-  caps: { ...INITIAL_CAPS },
-  population: INITIAL_POPULATION,
-  housing: 0,
-  mood: INITIAL_MOOD,
-  buildings: [],
-  placementMode: null,
+const createBaseBuilding = (): Building => ({
+  id: BASE_BUILDING_ID,
+  kind: BASE_BUILDING_KIND,
+  x: BASE_BUILDING_ANCHOR_X,
+  y: BASE_BUILDING_ANCHOR_Y,
+  builtOnDay: 1,
+  locked: true,
 });
+
+const buildInitialState = (): GameState => {
+  const baseBuilding = createBaseBuilding();
+  const baseHousing = BUILDING_DEFS[BASE_BUILDING_KIND]?.housing ?? 0;
+  return {
+    mode: "play",
+    status: "running",
+    speed: 1,
+    tick: 0,
+    day: 1,
+    resources: { ...INITIAL_RESOURCES },
+    caps: { ...INITIAL_CAPS },
+    population: INITIAL_POPULATION,
+    housing: baseHousing,
+    mood: INITIAL_MOOD,
+    buildings: [baseBuilding],
+    placementMode: null,
+  };
+};
 
 const clampResource = (
   id: ResourceId,
@@ -274,7 +291,7 @@ export const useGameStore = create<GameStore>()(
               (c) => c.x === x && c.y === y,
             ),
           );
-          if (!target) return false;
+          if (!target || target.locked) return false;
           const nextBuildings = state.buildings.filter((b) => b.id !== target.id);
           set({
             buildings: nextBuildings,
@@ -319,7 +336,7 @@ export const useGameStore = create<GameStore>()(
             (c) => c.x === x && c.y === y,
           ),
         );
-        if (!target) return;
+        if (!target || target.locked) return;
         const nextBuildings = state.buildings.filter((b) => b.id !== target.id);
         set({
           buildings: nextBuildings,
@@ -328,7 +345,7 @@ export const useGameStore = create<GameStore>()(
       },
     }),
     {
-      name: "isoshire-game-v4",
+      name: "isoshire-game-v5",
       partialize: (state) => ({
         mode: state.mode,
         speed: state.speed,
@@ -345,7 +362,14 @@ export const useGameStore = create<GameStore>()(
         if (state) {
           state.status = "paused";
           state.placementMode = null;
-          state.housing = computeHousing(state.buildings ?? []);
+          // Ensure the permanent base is always present after rehydrate.
+          const buildings = state.buildings ?? [];
+          if (!buildings.some((b) => b.id === BASE_BUILDING_ID)) {
+            state.buildings = [createBaseBuilding(), ...buildings];
+          } else {
+            state.buildings = buildings;
+          }
+          state.housing = computeHousing(state.buildings);
         }
       },
     },

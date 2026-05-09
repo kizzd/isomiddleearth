@@ -22,7 +22,15 @@ export interface Building {
   x: number;
   y: number;
   builtOnDay: number;
+  /** Locked buildings can't be demolished — used for the permanent town base. */
+  locked?: boolean;
 }
+
+/** The permanent base — Bag End / Landmark Residence, anchored near grid centre. */
+export const BASE_BUILDING_KIND = "3:2";
+export const BASE_BUILDING_ANCHOR_X = 2;
+export const BASE_BUILDING_ANCHOR_Y = 2;
+export const BASE_BUILDING_ID = "base";
 
 export interface GameState {
   mode: GameMode;
