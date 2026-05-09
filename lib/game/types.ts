@@ -1,3 +1,5 @@
+import type { BuildingKind } from "@/lib/game/buildings";
+
 export type GameMode = "editor" | "play";
 export type GameStatus = "running" | "paused" | "gameOver" | "victory";
 export type GameSpeed = 1 | 2 | 4;
@@ -15,6 +17,14 @@ export interface ResourceCap {
   stone: number;
 }
 
+export interface Building {
+  id: string;
+  kind: BuildingKind;
+  x: number;
+  y: number;
+  builtOnDay: number;
+}
+
 export interface GameState {
   mode: GameMode;
   status: GameStatus;
@@ -26,6 +36,8 @@ export interface GameState {
   population: number;
   housing: number;
   mood: number;
+  buildings: Building[];
+  placementMode: BuildingKind | null;
 }
 
 export const INITIAL_RESOURCES: ResourceBag = {

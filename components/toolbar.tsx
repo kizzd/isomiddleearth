@@ -17,6 +17,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import GameModeSwitch from "@/components/game-mode-switch";
+import BuildPanel from "@/components/build-panel";
 import {
   Dialog,
   DialogContent,
@@ -303,6 +304,7 @@ export default function Toolbar() {
       </Link>
 
       <GameModeSwitch />
+      <BuildPanel />
 
       {/* Grid Size */}
       <Dialog>
