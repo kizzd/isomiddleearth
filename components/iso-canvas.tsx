@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Plus, Minus, Maximize2 } from "lucide-react";
 import { useMapStore } from "@/lib/store";
 import { useGameStore } from "@/lib/game/store";
 import { useShallow } from "zustand/react/shallow";
@@ -18,6 +19,14 @@ import {
 import { BUILDING_DEFS, BuildingKind } from "@/lib/game/buildings";
 import type { Building } from "@/lib/game/types";
 
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 1.2;
+const PLACEMENT_TAP_OFFSET_Y = 80;
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value));
+
 export default function IsoCanvas() {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const bgRef = useRef<HTMLCanvasElement>(null);
@@ -26,6 +35,14 @@ export default function IsoCanvas() {
   const characterCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
   const isPlacingRef = useRef(false);
   const [displayScale, setDisplayScale] = useState(1);
+  const [userZoom, setUserZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const pinchStateRef = useRef<{
+    initialDistance: number;
+    initialZoom: number;
+    initialCenter: { x: number; y: number };
+    initialPan: { x: number; y: number };
+  } | null>(null);
 
   const {
     map,
@@ -51,17 +68,23 @@ export default function IsoCanvas() {
     })),
   );
 
-  const { gameMode, placementMode, buildings, placeBuilding, removeBuildingAt, setPlacementMode } =
-    useGameStore(
-      useShallow((s) => ({
-        gameMode: s.mode,
-        placementMode: s.placementMode,
-        buildings: s.buildings,
-        placeBuilding: s.placeBuilding,
-        removeBuildingAt: s.removeBuildingAt,
-        setPlacementMode: s.setPlacementMode,
-      })),
-    );
+  const {
+    gameMode,
+    placementMode,
+    buildings,
+    placeBuilding,
+    removeBuildingAt,
+    setPlacementMode,
+  } = useGameStore(
+    useShallow((s) => ({
+      gameMode: s.mode,
+      placementMode: s.placementMode,
+      buildings: s.buildings,
+      placeBuilding: s.placeBuilding,
+      removeBuildingAt: s.removeBuildingAt,
+      setPlacementMode: s.setPlacementMode,
+    })),
+  );
 
   const tileWidth = 128;
   const tileHeight = 64;
@@ -91,22 +114,23 @@ export default function IsoCanvas() {
     return () => observer.disconnect();
   }, [canvasWidth, canvasHeight]);
 
-  const getPosition = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const scaleX = e.currentTarget.width / rect.width;
-      const scaleY = e.currentTarget.height / rect.height;
-      const offsetX = (e.clientX - rect.left) * scaleX;
-      const offsetY = (e.clientY - rect.top) * scaleY;
-
-      // Convert to the coordinate system relative to the origin
+  const tilePosFromClient = useCallback(
+    (
+      clientX: number,
+      clientY: number,
+      canvas: HTMLCanvasElement,
+      applyPlacementOffset: boolean,
+    ) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const offsetX = (clientX - rect.left) * scaleX;
+      let offsetY = (clientY - rect.top) * scaleY;
+      if (applyPlacementOffset) offsetY += PLACEMENT_TAP_OFFSET_Y;
       const relX = offsetX - originX;
       const relY = offsetY - originY;
-
-      // Inverse of the isometric projection
       const _x = relX / tileWidth;
       const _y = relY / tileHeight;
-
       const x = Math.floor(_y - _x);
       const y = Math.floor(_x + _y);
       return { x, y };
@@ -124,11 +148,14 @@ export default function IsoCanvas() {
       tileRealm?: string,
     ) => {
       const realmId =
-        location === MIXED_TEXTURE_PLACE_ID ? tileRealm ?? TEXTURE_PLACES[0].id : location;
+        location === MIXED_TEXTURE_PLACE_ID
+          ? tileRealm ?? TEXTURE_PLACES[0].id
+          : location;
       const tilePath = getTilePath(realmId, row, col);
       const baseTilePath = getTilePath(realmId, 0, 0);
       const tileImage =
-        tileCacheRef.current.get(tilePath) ?? tileCacheRef.current.get(baseTilePath);
+        tileCacheRef.current.get(tilePath) ??
+        tileCacheRef.current.get(baseTilePath);
       if (!tileImage) return;
       ctx.save();
       ctx.translate(
@@ -148,7 +175,12 @@ export default function IsoCanvas() {
   );
 
   const drawCharacterTile = useCallback(
-    (ctx: CanvasRenderingContext2D, x: number, y: number, characterId: string | null) => {
+    (
+      ctx: CanvasRenderingContext2D,
+      x: number,
+      y: number,
+      characterId: string | null,
+    ) => {
       if (!characterId) return;
       const characterPath = getCharacterPath(characterId);
       if (!characterPath) return;
@@ -227,8 +259,6 @@ export default function IsoCanvas() {
 
   const getTileCoordinates = useCallback(() => {
     const coordKeys = new Set<string>();
-
-    // Always preload each realm's base tile as a fallback.
     coordKeys.add("0:0");
 
     for (const group of TILE_GROUPS) {
@@ -241,7 +271,12 @@ export default function IsoCanvas() {
 
     for (const mapRow of map) {
       for (const [row, col] of mapRow) {
-        if (Number.isInteger(row) && row >= 0 && Number.isInteger(col) && col >= 0) {
+        if (
+          Number.isInteger(row) &&
+          row >= 0 &&
+          Number.isInteger(col) &&
+          col >= 0
+        ) {
           coordKeys.add(`${row}:${col}`);
         }
       }
@@ -268,7 +303,6 @@ export default function IsoCanvas() {
     return Array.from(characterIds);
   }, [characterMap]);
 
-  // Load all tile and character assets used by the current mode.
   useEffect(() => {
     let cancelled = false;
     const loadAsset = (
@@ -328,7 +362,6 @@ export default function IsoCanvas() {
     };
   }, [location, getTileCoordinates, getCharacterIdsToPreload, drawMap]);
 
-  // Redraw on map/grid changes
   useEffect(() => {
     drawMap();
   }, [map, gridSize, drawMap]);
@@ -356,7 +389,9 @@ export default function IsoCanvas() {
         ctx.lineTo(-tileWidth / 2, tileHeight / 2);
         ctx.closePath();
         const valid = isDemolish ? occupied : !occupied;
-        ctx.strokeStyle = valid ? "rgba(220,40,40,0.8)" : "rgba(120,120,120,0.6)";
+        ctx.strokeStyle = valid
+          ? "rgba(40,180,40,0.85)"
+          : "rgba(220,40,40,0.85)";
         if (isDemolish && occupied) {
           ctx.fillStyle = "rgba(220,40,40,0.25)";
           ctx.fill();
@@ -403,14 +438,21 @@ export default function IsoCanvas() {
         setTile(x, y, activeTool);
         return;
       }
-
       setCharacter(x, y, activeCharacterTool);
     },
     [activeCharacterTool, activeTool, setCharacter, setTile],
   );
 
-  const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const pos = getPosition(e);
+  const placementApplyOffset =
+    gameMode === "play" && placementMode !== null;
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const pos = tilePosFromClient(
+      e.clientX,
+      e.clientY,
+      e.currentTarget,
+      placementApplyOffset && e.button !== 2,
+    );
     if (pos.x < 0 || pos.x >= gridSize || pos.y < 0 || pos.y >= gridSize) return;
 
     if (gameMode === "play") {
@@ -439,7 +481,12 @@ export default function IsoCanvas() {
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const cf = fgRef.current?.getContext("2d");
     if (!cf) return;
-    const pos = getPosition(e);
+    const pos = tilePosFromClient(
+      e.clientX,
+      e.clientY,
+      e.currentTarget,
+      placementApplyOffset,
+    );
 
     if (gameMode === "editor" && isPlacingRef.current) {
       if (pos.x >= 0 && pos.x < gridSize && pos.y >= 0 && pos.y < gridSize) {
@@ -458,32 +505,43 @@ export default function IsoCanvas() {
     isPlacingRef.current = false;
   };
 
-  const getTouchPosition = useCallback(
-    (touch: React.Touch, canvas: HTMLCanvasElement) => {
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const offsetX = (touch.clientX - rect.left) * scaleX;
-      const offsetY = (touch.clientY - rect.top) * scaleY;
-      const relX = offsetX - originX;
-      const relY = offsetY - originY;
-      const _x = relX / tileWidth;
-      const _y = relY / tileHeight;
-      const x = Math.floor(_y - _x);
-      const y = Math.floor(_x + _y);
-      return { x, y };
-    },
-    [originX, originY, tileWidth, tileHeight],
-  );
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (e.deltaY === 0) return;
+    e.stopPropagation();
+    setUserZoom((z) =>
+      clamp(z * (e.deltaY > 0 ? 1 / ZOOM_STEP : ZOOM_STEP), ZOOM_MIN, ZOOM_MAX),
+    );
+  };
 
   const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 2) {
+      const a = e.touches[0];
+      const b = e.touches[1];
+      const dx = b.clientX - a.clientX;
+      const dy = b.clientY - a.clientY;
+      pinchStateRef.current = {
+        initialDistance: Math.hypot(dx, dy),
+        initialZoom: userZoom,
+        initialCenter: {
+          x: (a.clientX + b.clientX) / 2,
+          y: (a.clientY + b.clientY) / 2,
+        },
+        initialPan: { ...pan },
+      };
+      return;
+    }
+
     const touch = e.touches[0];
     if (!touch) return;
     const canvas = e.currentTarget;
-    const pos = getTouchPosition(touch, canvas);
+    const pos = tilePosFromClient(
+      touch.clientX,
+      touch.clientY,
+      canvas,
+      placementApplyOffset,
+    );
     if (pos.x < 0 || pos.x >= gridSize || pos.y < 0 || pos.y >= gridSize) return;
 
-    e.preventDefault();
     const cf = fgRef.current?.getContext("2d");
     if (cf) drawHover(cf, pos.x, pos.y);
 
@@ -499,10 +557,41 @@ export default function IsoCanvas() {
   };
 
   const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 2 && pinchStateRef.current) {
+      const a = e.touches[0];
+      const b = e.touches[1];
+      const dx = b.clientX - a.clientX;
+      const dy = b.clientY - a.clientY;
+      const distance = Math.hypot(dx, dy);
+      const center = {
+        x: (a.clientX + b.clientX) / 2,
+        y: (a.clientY + b.clientY) / 2,
+      };
+      const ratio = distance / pinchStateRef.current.initialDistance;
+      const newZoom = clamp(
+        pinchStateRef.current.initialZoom * ratio,
+        ZOOM_MIN,
+        ZOOM_MAX,
+      );
+      const dxCenter = center.x - pinchStateRef.current.initialCenter.x;
+      const dyCenter = center.y - pinchStateRef.current.initialCenter.y;
+      setUserZoom(newZoom);
+      setPan({
+        x: pinchStateRef.current.initialPan.x + dxCenter,
+        y: pinchStateRef.current.initialPan.y + dyCenter,
+      });
+      return;
+    }
+
     const touch = e.touches[0];
     if (!touch) return;
     const canvas = e.currentTarget;
-    const pos = getTouchPosition(touch, canvas);
+    const pos = tilePosFromClient(
+      touch.clientX,
+      touch.clientY,
+      canvas,
+      placementApplyOffset,
+    );
 
     const cf = fgRef.current?.getContext("2d");
     if (cf) drawHover(cf, pos.x, pos.y);
@@ -514,21 +603,37 @@ export default function IsoCanvas() {
     }
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length < 2) {
+      pinchStateRef.current = null;
+    }
     isPlacingRef.current = false;
   };
+
+  const zoomIn = () => setUserZoom((z) => clamp(z * ZOOM_STEP, ZOOM_MIN, ZOOM_MAX));
+  const zoomOut = () =>
+    setUserZoom((z) => clamp(z / ZOOM_STEP, ZOOM_MIN, ZOOM_MAX));
+  const resetView = () => {
+    setUserZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  const effectiveScale = displayScale * userZoom;
 
   return (
     <div
       ref={wrapperRef}
       id="iso-canvas-wrapper"
-      className="relative flex flex-1 items-center justify-center overflow-hidden bg-muted/30 p-2"
+      className="relative flex flex-1 items-center justify-center overflow-hidden bg-muted/30"
+      onWheel={handleWheel}
     >
       <div
         className="relative"
         style={{
-          width: Math.round(canvasWidth * displayScale),
-          height: Math.round(canvasHeight * displayScale),
+          width: Math.round(canvasWidth * effectiveScale),
+          height: Math.round(canvasHeight * effectiveScale),
+          transform: `translate(${pan.x}px, ${pan.y}px)`,
+          willChange: "transform",
         }}
       >
         <canvas
@@ -542,14 +647,45 @@ export default function IsoCanvas() {
           width={canvasWidth}
           height={canvasHeight}
           className="absolute inset-0 h-full w-full touch-none"
-          onMouseDown={handleClick}
+          onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          onMouseUp={handleMouseUp}
+          onTouchCancel={handleTouchEnd}
           onContextMenu={(e) => e.preventDefault()}
         />
+      </div>
+
+      <div className="pointer-events-none absolute right-2 top-2 z-20 flex flex-col gap-1">
+        <button
+          type="button"
+          onClick={zoomIn}
+          aria-label="Powiększ"
+          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-md border bg-background/95 shadow-sm hover:bg-muted disabled:opacity-50"
+          disabled={userZoom >= ZOOM_MAX}
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={zoomOut}
+          aria-label="Pomniejsz"
+          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-md border bg-background/95 shadow-sm hover:bg-muted disabled:opacity-50"
+          disabled={userZoom <= ZOOM_MIN}
+        >
+          <Minus className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={resetView}
+          aria-label="Wyśrodkuj"
+          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-md border bg-background/95 shadow-sm hover:bg-muted"
+        >
+          <Maximize2 className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );

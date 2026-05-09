@@ -37,8 +37,8 @@ interface GameStore extends GameState {
 }
 
 const buildInitialState = (): GameState => ({
-  mode: "editor",
-  status: "paused",
+  mode: "play",
+  status: "running",
   speed: 1,
   tick: 0,
   day: 1,
@@ -310,7 +310,7 @@ export const useGameStore = create<GameStore>()(
       },
     }),
     {
-      name: "isoshire-game-v2",
+      name: "isoshire-game-v3",
       partialize: (state) => ({
         mode: state.mode,
         speed: state.speed,
