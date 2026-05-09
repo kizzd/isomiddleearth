@@ -106,3 +106,17 @@ export const BUILDING_LIST: BuildingDef[] = Object.values(BUILDING_DEFS);
 
 export const isBuildingKind = (value: unknown): value is BuildingKind =>
   typeof value === "string" && value in BUILDING_DEFS;
+
+/**
+ * A map cell is buildable if it's open ground we can swap for a building
+ * tile — Empty Grass (r0-c0), Tall Grass (r0-c1), or Wildflower Meadow
+ * (r0-c2). Water, paths, trees, dwellings, and existing buildings are
+ * locked out so we don't bury hand-placed editor content.
+ */
+export const isBuildableTile = (
+  tile: readonly [number, number, ...unknown[]] | undefined,
+): boolean => {
+  if (!tile) return false;
+  const [row, col] = tile;
+  return row === 0 && col >= 0 && col <= 2;
+};
