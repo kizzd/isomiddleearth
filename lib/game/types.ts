@@ -37,7 +37,7 @@ export interface GameState {
   housing: number;
   mood: number;
   buildings: Building[];
-  placementMode: BuildingKind | null;
+  placementMode: BuildingKind | "demolish" | null;
 }
 
 export const INITIAL_RESOURCES: ResourceBag = {

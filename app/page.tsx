@@ -6,6 +6,8 @@ import type { CollectionLoaderSnapshot } from "@/components/collection-loader";
 import { getCollectionMapById } from "@/lib/collections";
 import GithubStarModal from "@/components/github-star-modal";
 import GameRoot from "@/components/game-root";
+import ResourceHUD from "@/components/resource-hud";
+import BuildPanel from "@/components/build-panel";
 
 export default async function Home({
   searchParams,
@@ -36,11 +38,11 @@ export default async function Home({
       <CollectionLoader snapshot={initialCollection} />
       <GithubStarModal />
       <Toolbar />
-      <div className="relative flex flex-1 flex-col overflow-hidden">
-        <IsoCanvas />
-        <GameRoot />
-      </div>
+      <ResourceHUD />
+      <IsoCanvas />
       <AssetPicker />
+      <BuildPanel />
+      <GameRoot />
     </main>
   );
 }

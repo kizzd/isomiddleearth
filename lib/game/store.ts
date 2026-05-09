@@ -29,10 +29,12 @@ interface GameStore extends GameState {
   addResource: (id: ResourceId, amount: number) => void;
   spend: (cost: Partial<ResourceBag>) => boolean;
   canAfford: (cost: Partial<ResourceBag>) => boolean;
-  setPlacementMode: (kind: BuildingKind | null) => void;
+  setPlacementMode: (kind: PlacementMode) => void;
   placeBuilding: (x: number, y: number) => boolean;
   removeBuildingAt: (x: number, y: number) => void;
 }
+
+type PlacementMode = BuildingKind | "demolish" | null;
 
 const buildInitialState = (): GameState => ({
   mode: "editor",
@@ -235,16 +237,30 @@ export const useGameStore = create<GameStore>()(
       placeBuilding: (x, y) => {
         const state = get();
         if (state.mode !== "play") return false;
-        const kind = state.placementMode;
-        if (!kind) return false;
+        const placement = state.placementMode;
+        if (!placement) return false;
+
+        if (placement === "demolish") {
+          const before = state.buildings.length;
+          const nextBuildings = state.buildings.filter(
+            (b) => !(b.x === x && b.y === y),
+          );
+          if (nextBuildings.length === before) return false;
+          set({
+            buildings: nextBuildings,
+            housing: computeHousing(nextBuildings),
+          });
+          return true;
+        }
+
         if (state.buildings.some((b) => b.x === x && b.y === y)) return false;
 
-        const def = BUILDING_DEFS[kind];
+        const def = BUILDING_DEFS[placement];
         if (!hasResources(state.resources, def.cost)) return false;
 
         const building: Building = {
           id: newBuildingId(),
-          kind,
+          kind: placement,
           x,
           y,
           builtOnDay: state.day,

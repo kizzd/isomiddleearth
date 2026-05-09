@@ -388,7 +388,8 @@ export default function IsoCanvas() {
 
       if (gameMode === "play" && placementMode) {
         const occupied = buildings.some((b) => b.x === x && b.y === y);
-        if (!occupied) {
+        const isDemolish = placementMode === "demolish";
+        if (placementMode !== "demolish" && !occupied) {
           drawBuildingShape(ctx, x, y, placementMode, 0.55);
         }
         ctx.save();
@@ -402,7 +403,12 @@ export default function IsoCanvas() {
         ctx.lineTo(0, tileHeight);
         ctx.lineTo(-tileWidth / 2, tileHeight / 2);
         ctx.closePath();
-        ctx.strokeStyle = occupied ? "rgba(220,40,40,0.8)" : "rgba(40,180,40,0.8)";
+        const valid = isDemolish ? occupied : !occupied;
+        ctx.strokeStyle = valid ? "rgba(220,40,40,0.8)" : "rgba(120,120,120,0.6)";
+        if (isDemolish && occupied) {
+          ctx.fillStyle = "rgba(220,40,40,0.25)";
+          ctx.fill();
+        }
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.restore();
@@ -500,6 +506,66 @@ export default function IsoCanvas() {
     isPlacingRef.current = false;
   };
 
+  const getTouchPosition = useCallback(
+    (touch: React.Touch, canvas: HTMLCanvasElement) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const offsetX = (touch.clientX - rect.left) * scaleX;
+      const offsetY = (touch.clientY - rect.top) * scaleY;
+      const relX = offsetX - originX;
+      const relY = offsetY - originY;
+      const _x = relX / tileWidth;
+      const _y = relY / tileHeight;
+      const x = Math.floor(_y - _x);
+      const y = Math.floor(_x + _y);
+      return { x, y };
+    },
+    [originX, originY, tileWidth, tileHeight],
+  );
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const touch = e.touches[0];
+    if (!touch) return;
+    const canvas = e.currentTarget;
+    const pos = getTouchPosition(touch, canvas);
+    if (pos.x < 0 || pos.x >= gridSize || pos.y < 0 || pos.y >= gridSize) return;
+
+    e.preventDefault();
+    const cf = fgRef.current?.getContext("2d");
+    if (cf) drawHover(cf, pos.x, pos.y);
+
+    if (gameMode === "play") {
+      if (placementMode) {
+        placeBuilding(pos.x, pos.y);
+      }
+      return;
+    }
+
+    paintAt(pos.x, pos.y);
+    isPlacingRef.current = true;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const touch = e.touches[0];
+    if (!touch) return;
+    const canvas = e.currentTarget;
+    const pos = getTouchPosition(touch, canvas);
+
+    const cf = fgRef.current?.getContext("2d");
+    if (cf) drawHover(cf, pos.x, pos.y);
+
+    if (gameMode === "editor" && isPlacingRef.current) {
+      if (pos.x >= 0 && pos.x < gridSize && pos.y >= 0 && pos.y < gridSize) {
+        paintAt(pos.x, pos.y);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    isPlacingRef.current = false;
+  };
+
   return (
     <div
       ref={wrapperRef}
@@ -526,6 +592,9 @@ export default function IsoCanvas() {
           className="absolute inset-0 h-full w-full touch-none"
           onMouseDown={handleClick}
           onMouseMove={handleMouseMove}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
           onMouseUp={handleMouseUp}
           onContextMenu={(e) => e.preventDefault()}
         />
