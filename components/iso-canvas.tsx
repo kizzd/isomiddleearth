@@ -74,6 +74,7 @@ export default function IsoCanvas() {
     gameMode,
     placementMode,
     buildings,
+    resources,
     placeBuilding,
     removeBuildingAt,
     setPlacementMode,
@@ -82,10 +83,21 @@ export default function IsoCanvas() {
       gameMode: s.mode,
       placementMode: s.placementMode,
       buildings: s.buildings,
+      resources: s.resources,
       placeBuilding: s.placeBuilding,
       removeBuildingAt: s.removeBuildingAt,
       setPlacementMode: s.setPlacementMode,
     })),
+  );
+
+  const canAffordBuilding = useCallback(
+    (kind: BuildingKind) => {
+      const cost = BUILDING_DEFS[kind].cost;
+      return (Object.entries(cost) as [keyof typeof resources, number][]).every(
+        ([id, amount]) => (resources[id] ?? 0) >= amount,
+      );
+    },
+    [resources],
   );
 
   const tileWidth = 128;
@@ -447,7 +459,8 @@ export default function IsoCanvas() {
             ),
           ),
         );
-        const valid = allInGrid && !anyOccupied;
+        const affordable = canAffordBuilding(placementMode);
+        const valid = allInGrid && !anyOccupied && affordable;
 
         // Render ghost tiles in iso back-to-front order so footprint
         // overlap is sane.
@@ -510,6 +523,7 @@ export default function IsoCanvas() {
       placementMode,
       buildings,
       drawBuildingAt,
+      canAffordBuilding,
       originX,
       originY,
       tileWidth,
@@ -528,6 +542,23 @@ export default function IsoCanvas() {
     [activeCharacterTool, activeTool, setCharacter, setTile],
   );
 
+  const tryPlacement = useCallback(
+    (x: number, y: number) => {
+      if (!placementMode) return;
+      if (placementMode === "demolish") {
+        placeBuilding(x, y);
+        return;
+      }
+      const cells = footprintCells(placementMode, x, y);
+      const allInGrid = cells.every(
+        (c) => c.x >= 0 && c.x < gridSize && c.y >= 0 && c.y < gridSize,
+      );
+      if (!allInGrid) return;
+      placeBuilding(x, y);
+    },
+    [placementMode, placeBuilding, gridSize],
+  );
+
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const pos = tilePosFromClient(e.clientX, e.clientY, e.currentTarget);
     if (pos.x < 0 || pos.x >= gridSize || pos.y < 0 || pos.y >= gridSize) return;
@@ -542,7 +573,7 @@ export default function IsoCanvas() {
         return;
       }
       if (placementMode) {
-        placeBuilding(pos.x, pos.y);
+        tryPlacement(pos.x, pos.y);
       }
       return;
     }
@@ -614,7 +645,7 @@ export default function IsoCanvas() {
 
     if (gameMode === "play") {
       if (placementMode) {
-        placeBuilding(pos.x, pos.y);
+        tryPlacement(pos.x, pos.y);
       }
       return;
     }
