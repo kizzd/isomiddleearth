@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Image from "next/image";
 import { useShallow } from "zustand/react/shallow";
-import { Hammer, X, Trash2, Pause, Play } from "lucide-react";
+import { Hammer, X, Trash2, Pause, Play, Eraser } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGameStore } from "@/lib/game/store";
 import { useMapStore } from "@/lib/store";
@@ -39,6 +39,7 @@ export default function BuildPanel() {
     resources,
     setPlacementMode,
     togglePause,
+    reset,
   } = useGameStore(
     useShallow((s) => ({
       mode: s.mode,
@@ -47,10 +48,30 @@ export default function BuildPanel() {
       resources: s.resources,
       setPlacementMode: s.setPlacementMode,
       togglePause: s.togglePause,
+      reset: s.reset,
     })),
   );
 
-  const location = useMapStore((s) => s.location);
+  const { location, initMap } = useMapStore(
+    useShallow((s) => ({
+      location: s.location,
+      initMap: s.initMap,
+    })),
+  );
+
+  const handleResetBoard = () => {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        "Wyczyścić planszę do samej trawy? Edytor i wszystkie budynki gry zostaną zresetowane.",
+      )
+    ) {
+      return;
+    }
+    initMap();
+    reset();
+    setPlacementMode(null);
+  };
 
   useEffect(() => {
     if (mode !== "play") return;
@@ -176,6 +197,20 @@ export default function BuildPanel() {
             </button>
           );
         })}
+
+        <button
+          type="button"
+          onClick={handleResetBoard}
+          className="flex shrink-0 min-w-[88px] flex-col items-center justify-between gap-0.5 rounded-md border border-dashed bg-background px-2 py-1.5 text-xs hover:bg-muted"
+          aria-label="Zresetuj planszę do trawy (debug)"
+          title="Wyczyść planszę i zresetuj grę"
+        >
+          <Eraser className="h-5 w-5 text-muted-foreground" />
+          <span className="text-xs font-semibold leading-tight">Wyczyść</span>
+          <span className="text-[10px] leading-tight text-muted-foreground">
+            do trawy
+          </span>
+        </button>
 
         <button
           type="button"
