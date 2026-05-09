@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
   Building,
+  FOOD_PER_POP_PER_TICK,
   GameMode,
   GameSpeed,
   GameState,
@@ -10,9 +11,12 @@ import {
   INITIAL_MOOD,
   INITIAL_POPULATION,
   INITIAL_RESOURCES,
+  POP_GROWTH_FOOD_MIN,
+  POP_GROWTH_MOOD_MIN,
   ResourceBag,
   ResourceId,
   TICKS_PER_DAY,
+  VICTORY_POPULATION,
 } from "@/lib/game/types";
 import { BUILDING_DEFS, BuildingKind } from "@/lib/game/buildings";
 
@@ -96,10 +100,20 @@ export const useGameStore = create<GameStore>()(
 
       setMode: (mode) => {
         const { status } = get();
+        const isTerminal = status === "victory" || status === "gameOver";
         set({
           mode,
           placementMode: null,
-          status: mode === "play" ? (status === "paused" ? "running" : status) : "paused",
+          status:
+            mode === "play"
+              ? isTerminal
+                ? status
+                : status === "paused"
+                  ? "running"
+                  : status
+              : isTerminal
+                ? status
+                : "paused",
         });
       },
 
@@ -115,7 +129,13 @@ export const useGameStore = create<GameStore>()(
         }
       },
 
-      reset: () => set(buildInitialState()),
+      reset: () => {
+        const wasPlaying = get().mode === "play";
+        set({
+          ...buildInitialState(),
+          ...(wasPlaying ? { mode: "play", status: "running" } : {}),
+        });
+      },
 
       advanceTick: () => {
         const state = get();
@@ -123,9 +143,10 @@ export const useGameStore = create<GameStore>()(
 
         const nextTick = state.tick + 1;
         const nextDay = Math.floor(nextTick / TICKS_PER_DAY) + 1;
+        const dayChanged = nextDay !== state.day;
 
         const production = computeProduction(state.buildings);
-        const foodConsumption = state.population * 0.05;
+        const foodConsumption = state.population * FOOD_PER_POP_PER_TICK;
 
         const nextResources: ResourceBag = {
           food: clampResource(
@@ -149,8 +170,31 @@ export const useGameStore = create<GameStore>()(
         let nextMood = state.mood;
         if (nextResources.food <= 0) {
           nextMood = Math.max(0, nextMood - 0.05);
+        } else if (state.population > state.housing) {
+          nextMood = Math.max(0, nextMood - 0.02);
         } else if (nextMood < 100) {
           nextMood = Math.min(100, nextMood + 0.01);
+        }
+
+        let nextPopulation = state.population;
+        let nextStatus: GameStatus = state.status;
+
+        if (dayChanged) {
+          if (nextResources.food <= 0 && state.population > 0) {
+            nextPopulation = Math.max(0, state.population - 1);
+          } else if (
+            state.housing > state.population &&
+            nextResources.food >= POP_GROWTH_FOOD_MIN &&
+            nextMood >= POP_GROWTH_MOOD_MIN
+          ) {
+            nextPopulation = state.population + 1;
+          }
+
+          if (nextPopulation >= VICTORY_POPULATION) {
+            nextStatus = "victory";
+          } else if (nextPopulation === 0 && nextDay > 1) {
+            nextStatus = "gameOver";
+          }
         }
 
         set({
@@ -158,6 +202,8 @@ export const useGameStore = create<GameStore>()(
           day: nextDay,
           resources: nextResources,
           mood: nextMood,
+          population: nextPopulation,
+          status: nextStatus,
         });
       },
 

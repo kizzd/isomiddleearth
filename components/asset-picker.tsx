@@ -5,8 +5,12 @@ import CharacterPicker from "@/components/character-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Castle02Icon, UniversalAccessIcon } from "@hugeicons/core-free-icons";
+import { useGameStore } from "@/lib/game/store";
 
 export default function AssetPicker() {
+  const mode = useGameStore((s) => s.mode);
+  if (mode === "play") return null;
+
   return (
     <div className="shrink-0 border-t bg-background">
       <Tabs defaultValue="buildings" className="gap-0">
