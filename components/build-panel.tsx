@@ -1,44 +1,35 @@
 "use client";
 
 import { useEffect } from "react";
+import Image from "next/image";
 import { useShallow } from "zustand/react/shallow";
-import {
-  Hammer,
-  Home,
-  Wheat,
-  Trees,
-  Mountain,
-  X,
-  Trash2,
-  Pause,
-  Play,
-} from "lucide-react";
+import { Hammer, X, Trash2, Pause, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGameStore } from "@/lib/game/store";
+import { useMapStore } from "@/lib/store";
 import { BUILDING_LIST, BuildingKind } from "@/lib/game/buildings";
+import { MIXED_TEXTURE_PLACE_ID, TEXTURE_PLACES } from "@/lib/textures";
 import type { ResourceBag, ResourceId } from "@/lib/game/types";
 
-const RESOURCE_ICON_TEXT: Record<ResourceId, string> = {
+const RESOURCE_GLYPH: Record<ResourceId, string> = {
   food: "🌾",
   wood: "🌲",
-  stone: "🪨",
   gold: "🪙",
-};
-
-const BUILDING_ICON: Record<
-  BuildingKind,
-  React.ComponentType<{ className?: string; style?: React.CSSProperties }>
-> = {
-  house: Home,
-  farm: Wheat,
-  lumberjack: Trees,
-  quarry: Mountain,
 };
 
 const formatCost = (cost: Partial<ResourceBag>) =>
   (Object.entries(cost) as [ResourceId, number][])
-    .map(([id, amount]) => `${RESOURCE_ICON_TEXT[id]}${amount}`)
+    .map(([id, amount]) => `${RESOURCE_GLYPH[id]}${amount}`)
     .join(" ");
+
+const formatProduction = (
+  production: Partial<Record<ResourceId, number>> | undefined,
+) =>
+  production
+    ? (Object.entries(production) as [ResourceId, number][])
+        .map(([id, amount]) => `${RESOURCE_GLYPH[id]}+${amount.toFixed(2)}`)
+        .join(" ")
+    : null;
 
 export default function BuildPanel() {
   const {
@@ -59,6 +50,8 @@ export default function BuildPanel() {
     })),
   );
 
+  const location = useMapStore((s) => s.location);
+
   useEffect(() => {
     if (mode !== "play") return;
     const onKey = (e: KeyboardEvent) => {
@@ -72,6 +65,9 @@ export default function BuildPanel() {
 
   if (mode !== "play") return null;
 
+  const previewRealm =
+    location === MIXED_TEXTURE_PLACE_ID ? TEXTURE_PLACES[0].id : location;
+
   const canAfford = (cost: Partial<ResourceBag>) =>
     (Object.keys(cost) as ResourceId[]).every(
       (id) => resources[id] >= (cost[id] ?? 0),
@@ -81,10 +77,15 @@ export default function BuildPanel() {
     setPlacementMode(placementMode === kind ? null : kind);
   };
 
+  const placingDef =
+    placementMode && placementMode !== "demolish"
+      ? BUILDING_LIST.find((b) => b.kind === placementMode)
+      : null;
+
   const placingLabel = placementMode
     ? placementMode === "demolish"
       ? "Tryb wyburzania"
-      : `Stawianie: ${BUILDING_LIST.find((b) => b.kind === placementMode)?.label ?? ""}`
+      : `Stawianie: ${placingDef?.label ?? ""}`
     : null;
 
   return (
@@ -128,9 +129,9 @@ export default function BuildPanel() {
         </button>
 
         {BUILDING_LIST.map((def) => {
-          const Icon = BUILDING_ICON[def.kind];
           const affordable = canAfford(def.cost);
           const active = placementMode === def.kind;
+          const previewSrc = `/tiles/${previewRealm}/r${def.tileRow}-c${def.tileCol}.png`;
           return (
             <button
               key={def.kind}
@@ -138,31 +139,40 @@ export default function BuildPanel() {
               onClick={() => toggle(def.kind)}
               disabled={!affordable && !active}
               className={cn(
-                "flex shrink-0 min-w-[88px] flex-col items-center justify-between gap-0.5 rounded-md border px-2 py-1.5 text-xs transition-colors",
+                "flex shrink-0 min-w-[96px] flex-col items-center justify-between gap-0.5 rounded-md border px-2 py-1 text-xs transition-colors",
                 active
-                  ? "border-primary bg-primary text-primary-foreground ring-2 ring-primary"
+                  ? "border-primary bg-primary/10 ring-2 ring-primary"
                   : affordable
                     ? "bg-background hover:bg-muted"
-                    : "cursor-not-allowed bg-muted/50 text-muted-foreground opacity-60",
+                    : "cursor-not-allowed bg-muted/50 opacity-60",
               )}
               aria-pressed={active}
               aria-label={`${def.label}, koszt ${formatCost(def.cost)}`}
+              title={def.description}
             >
-              <Icon
-                className="h-5 w-5"
-                style={!active ? { color: def.color } : undefined}
-              />
+              <div className="relative h-10 w-12">
+                <Image
+                  src={previewSrc}
+                  alt=""
+                  fill
+                  sizes="48px"
+                  className="object-contain"
+                  unoptimized
+                />
+              </div>
               <span className="text-xs font-semibold leading-tight">
                 {def.label}
               </span>
-              <span
-                className={cn(
-                  "text-[10px] tabular-nums leading-tight",
-                  active ? "text-primary-foreground/90" : "text-muted-foreground",
-                )}
-              >
+              <span className="text-[10px] tabular-nums leading-tight text-muted-foreground">
                 {formatCost(def.cost)}
               </span>
+              {def.production || def.housing || def.foodMultiplier ? (
+                <span className="text-[10px] tabular-nums leading-tight text-emerald-700">
+                  {def.housing ? `+${def.housing} 🏠 ` : null}
+                  {formatProduction(def.production) ?? ""}
+                  {def.foodMultiplier ? `×${def.foodMultiplier} 🌾` : null}
+                </span>
+              ) : null}
             </button>
           );
         })}

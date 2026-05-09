@@ -4,7 +4,6 @@ import { useShallow } from "zustand/react/shallow";
 import {
   Wheat,
   TreePine,
-  Mountain,
   Coins,
   Users,
   Smile,
@@ -86,13 +85,14 @@ export default function ResourceHUD() {
         <div className="flex-1">
           <div className="flex items-baseline justify-between gap-2 text-xs sm:text-sm">
             <span className="font-medium">
-              Cel:{" "}
+              <span className="hidden sm:inline">Party at Bag End: </span>
+              <span className="sm:hidden">Cel: </span>
               <span className="tabular-nums">
                 {population} / {VICTORY_POPULATION}
               </span>
               <span className="hidden text-muted-foreground sm:inline">
                 {" "}
-                mieszkańców
+                hobbitów
               </span>
             </span>
             <span className="flex items-center gap-1 text-muted-foreground tabular-nums">
@@ -112,7 +112,7 @@ export default function ResourceHUD() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
         <ResourceCell
           icon={<Wheat className="h-4 w-4 text-amber-600" />}
           value={formatNumber(resources.food)}
@@ -127,16 +127,15 @@ export default function ResourceHUD() {
           label="Drewno"
         />
         <ResourceCell
-          icon={<Mountain className="h-4 w-4 text-stone-500" />}
-          value={formatNumber(resources.stone)}
-          cap={String(caps.stone)}
-          label="Kamień"
+          icon={<Coins className="h-4 w-4 text-yellow-500" />}
+          value={formatNumber(resources.gold)}
+          label="Złoto"
         />
         <ResourceCell
           icon={<Users className="h-4 w-4 text-sky-600" />}
           value={String(population)}
           cap={String(housing)}
-          label="Pop / dom"
+          label="Hobbici"
           tone={overcrowded ? "warn" : "default"}
         />
         <ResourceCell
@@ -144,11 +143,6 @@ export default function ResourceHUD() {
           value={`${Math.round(mood)}%`}
           label="Mood"
           tone={mood < 30 ? "warn" : "default"}
-        />
-        <ResourceCell
-          icon={<Coins className="h-4 w-4 text-yellow-500" />}
-          value={formatNumber(resources.gold)}
-          label="Złoto"
         />
       </div>
     </div>

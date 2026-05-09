@@ -7,14 +7,13 @@ export type GameSpeed = 1 | 2 | 4;
 export const TICK_MS = 1000;
 export const TICKS_PER_DAY = 240;
 
-export type ResourceId = "food" | "wood" | "stone" | "gold";
+export type ResourceId = "food" | "wood" | "gold";
 
 export type ResourceBag = Record<ResourceId, number>;
 
 export interface ResourceCap {
   food: number;
   wood: number;
-  stone: number;
 }
 
 export interface Building {
@@ -43,20 +42,19 @@ export interface GameState {
 export const INITIAL_RESOURCES: ResourceBag = {
   food: 60,
   wood: 100,
-  stone: 30,
-  gold: 0,
+  gold: 30,
 };
 
 export const INITIAL_CAPS: ResourceCap = {
   food: 300,
   wood: 300,
-  stone: 200,
 };
 
 export const INITIAL_POPULATION = 3;
 export const INITIAL_MOOD = 100;
 
 export const VICTORY_POPULATION = 20;
+export const VICTORY_DAY_LIMIT = 50;
 export const FOOD_PER_POP_PER_TICK = 0.04;
 export const POP_GROWTH_FOOD_MIN = 5;
 export const POP_GROWTH_MOOD_MIN = 50;
