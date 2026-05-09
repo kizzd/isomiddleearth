@@ -639,9 +639,10 @@ export default function IsoCanvas() {
       <div
         className="relative"
         style={{
-          width: Math.round(canvasWidth * effectiveScale),
-          height: Math.round(canvasHeight * effectiveScale),
-          transform: `translate(${pan.x}px, ${pan.y}px)`,
+          width: canvasWidth,
+          height: canvasHeight,
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${effectiveScale})`,
+          transformOrigin: "50% 50%",
           willChange: "transform",
         }}
       >
@@ -649,13 +650,13 @@ export default function IsoCanvas() {
           ref={bgRef}
           width={canvasWidth}
           height={canvasHeight}
-          className="absolute inset-0 h-full w-full touch-none"
+          className="absolute inset-0 touch-none"
         />
         <canvas
           ref={fgRef}
           width={canvasWidth}
           height={canvasHeight}
-          className="absolute inset-0 h-full w-full touch-none"
+          className="absolute inset-0 touch-none"
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
