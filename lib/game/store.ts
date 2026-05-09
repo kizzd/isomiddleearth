@@ -328,7 +328,7 @@ export const useGameStore = create<GameStore>()(
       },
     }),
     {
-      name: "isoshire-game-v3",
+      name: "isoshire-game-v4",
       partialize: (state) => ({
         mode: state.mode,
         speed: state.speed,
