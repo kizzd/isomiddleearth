@@ -16,7 +16,7 @@ import {
   getCharacterPath,
   isCharacterId,
 } from "@/lib/characters";
-import { BUILDING_DEFS, BuildingKind } from "@/lib/game/buildings";
+import { BUILDING_DEFS, BuildingKind, isBuildableTile } from "@/lib/game/buildings";
 import type { Building } from "@/lib/game/types";
 
 const ZOOM_MIN = 0.5;
@@ -374,7 +374,10 @@ export default function IsoCanvas() {
       if (gameMode === "play" && placementMode) {
         const occupied = buildings.some((b) => b.x === x && b.y === y);
         const isDemolish = placementMode === "demolish";
-        if (placementMode !== "demolish" && !occupied) {
+        const buildable = isBuildableTile(map[x][y]);
+        const valid = isDemolish ? occupied : !occupied && buildable;
+
+        if (placementMode !== "demolish" && !occupied && buildable) {
           drawBuildingAt(ctx, x, y, placementMode, 0.55);
         }
         ctx.save();
@@ -388,12 +391,13 @@ export default function IsoCanvas() {
         ctx.lineTo(0, tileHeight);
         ctx.lineTo(-tileWidth / 2, tileHeight / 2);
         ctx.closePath();
-        const valid = isDemolish ? occupied : !occupied;
         ctx.strokeStyle = valid
           ? "rgba(40,180,40,0.85)"
           : "rgba(220,40,40,0.85)";
-        if (isDemolish && occupied) {
-          ctx.fillStyle = "rgba(220,40,40,0.25)";
+        if ((isDemolish && occupied) || (!isDemolish && !valid)) {
+          ctx.fillStyle = isDemolish
+            ? "rgba(220,40,40,0.25)"
+            : "rgba(220,40,40,0.18)";
           ctx.fill();
         }
         ctx.lineWidth = 2;
@@ -425,6 +429,7 @@ export default function IsoCanvas() {
       placementMode,
       buildings,
       drawBuildingAt,
+      map,
       originX,
       originY,
       tileWidth,
@@ -465,7 +470,9 @@ export default function IsoCanvas() {
         return;
       }
       if (placementMode) {
-        placeBuilding(pos.x, pos.y);
+        if (placementMode === "demolish" || isBuildableTile(map[pos.x][pos.y])) {
+          placeBuilding(pos.x, pos.y);
+        }
       }
       return;
     }
@@ -547,7 +554,9 @@ export default function IsoCanvas() {
 
     if (gameMode === "play") {
       if (placementMode) {
-        placeBuilding(pos.x, pos.y);
+        if (placementMode === "demolish" || isBuildableTile(map[pos.x][pos.y])) {
+          placeBuilding(pos.x, pos.y);
+        }
       }
       return;
     }
