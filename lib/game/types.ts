@@ -41,17 +41,22 @@ export interface GameState {
 }
 
 export const INITIAL_RESOURCES: ResourceBag = {
-  food: 50,
-  wood: 50,
-  stone: 20,
+  food: 60,
+  wood: 100,
+  stone: 30,
   gold: 0,
 };
 
 export const INITIAL_CAPS: ResourceCap = {
-  food: 200,
-  wood: 200,
-  stone: 100,
+  food: 300,
+  wood: 300,
+  stone: 200,
 };
 
 export const INITIAL_POPULATION = 3;
 export const INITIAL_MOOD = 100;
+
+export const VICTORY_POPULATION = 20;
+export const FOOD_PER_POP_PER_TICK = 0.04;
+export const POP_GROWTH_FOOD_MIN = 5;
+export const POP_GROWTH_MOOD_MIN = 50;

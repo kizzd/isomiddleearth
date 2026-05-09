@@ -293,7 +293,7 @@ export default function Toolbar() {
   }, [undo, canUndo]);
 
   return (
-    <div className="flex items-center gap-1 border-b bg-background px-2 py-2 sm:gap-2 sm:px-4">
+    <div className="flex flex-wrap items-center gap-1 border-b bg-background px-2 py-2 sm:gap-2 sm:px-4">
       <Link href="/" className="mr-1 flex shrink-0 items-center gap-2 sm:mr-4">
         <Image src="/logo.png" alt="Isoshire" width={40} height={40} className="w-10 object-contain" />
         <h1
