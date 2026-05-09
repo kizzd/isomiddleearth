@@ -10,6 +10,11 @@ export type BuildingKind =
   | "market"
   | "campfire";
 
+export interface BuildingFootprint {
+  w: number;
+  h: number;
+}
+
 export interface BuildingDef {
   kind: BuildingKind;
   label: string;
@@ -22,6 +27,8 @@ export interface BuildingDef {
   moodPerTick?: number;
   /** Multiplicative bonus applied to all food production from other buildings. */
   foodMultiplier?: number;
+  /** Multi-cell footprint anchored at click position. Defaults to 1×1. */
+  footprint?: BuildingFootprint;
 }
 
 export const BUILDING_DEFS: Record<BuildingKind, BuildingDef> = {
@@ -46,20 +53,22 @@ export const BUILDING_DEFS: Record<BuildingKind, BuildingDef> = {
   vegetable_garden: {
     kind: "vegetable_garden",
     label: "Ogród",
-    description: "Tani warzywnik na podwórku.",
+    description: "Dwa na dwa kafle warzywnika — większy plon.",
     tileRow: 2,
     tileCol: 5,
-    cost: { wood: 6 },
-    production: { food: 0.03 },
+    cost: { wood: 24 },
+    production: { food: 0.12 },
+    footprint: { w: 2, h: 2 },
   },
   apple_orchard: {
     kind: "apple_orchard",
     label: "Sad jabłoniowy",
-    description: "Wolny, ale obfity zbiór.",
+    description: "Cały gaj jabłoni — 2×2 kafle, obfity zbiór.",
     tileRow: 2,
     tileCol: 3,
-    cost: { wood: 25 },
-    production: { food: 0.1 },
+    cost: { wood: 40 },
+    production: { food: 0.16 },
+    footprint: { w: 2, h: 2 },
   },
   pine_grove: {
     kind: "pine_grove",
@@ -83,11 +92,12 @@ export const BUILDING_DEFS: Record<BuildingKind, BuildingDef> = {
   market: {
     kind: "market",
     label: "Stragan",
-    description: "Hobbici handlują plonami — przynosi złoto.",
+    description: "Hobbicki targ — 2×2 kafle, więcej kupców.",
     tileRow: 4,
     tileCol: 2,
-    cost: { wood: 20 },
-    production: { gold: 0.04 },
+    cost: { wood: 40, gold: 10 },
+    production: { gold: 0.1 },
+    footprint: { w: 2, h: 2 },
   },
   campfire: {
     kind: "campfire",
@@ -107,16 +117,21 @@ export const BUILDING_LIST: BuildingDef[] = Object.values(BUILDING_DEFS);
 export const isBuildingKind = (value: unknown): value is BuildingKind =>
   typeof value === "string" && value in BUILDING_DEFS;
 
-/**
- * A map cell is buildable if it's open ground we can swap for a building
- * tile — Empty Grass (r0-c0), Tall Grass (r0-c1), or Wildflower Meadow
- * (r0-c2). Water, paths, trees, dwellings, and existing buildings are
- * locked out so we don't bury hand-placed editor content.
- */
-export const isBuildableTile = (
-  tile: readonly [number, number, ...unknown[]] | undefined,
-): boolean => {
-  if (!tile) return false;
-  const [row, col] = tile;
-  return row === 0 && col >= 0 && col <= 2;
+export const getFootprint = (kind: BuildingKind): BuildingFootprint =>
+  BUILDING_DEFS[kind].footprint ?? { w: 1, h: 1 };
+
+/** All cells covered by a building anchored at (anchorX, anchorY). */
+export const footprintCells = (
+  kind: BuildingKind,
+  anchorX: number,
+  anchorY: number,
+): { x: number; y: number }[] => {
+  const { w, h } = getFootprint(kind);
+  const cells: { x: number; y: number }[] = [];
+  for (let dx = 0; dx < h; dx++) {
+    for (let dy = 0; dy < w; dy++) {
+      cells.push({ x: anchorX + dx, y: anchorY + dy });
+    }
+  }
+  return cells;
 };

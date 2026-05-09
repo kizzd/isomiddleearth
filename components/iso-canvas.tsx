@@ -16,12 +16,15 @@ import {
   getCharacterPath,
   isCharacterId,
 } from "@/lib/characters";
-import { BUILDING_DEFS, BuildingKind } from "@/lib/game/buildings";
+import {
+  BUILDING_DEFS,
+  BuildingKind,
+  footprintCells,
+} from "@/lib/game/buildings";
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 1.2;
-const PLACEMENT_TAP_OFFSET_Y = 80;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -114,18 +117,12 @@ export default function IsoCanvas() {
   }, [canvasWidth, canvasHeight]);
 
   const tilePosFromClient = useCallback(
-    (
-      clientX: number,
-      clientY: number,
-      canvas: HTMLCanvasElement,
-      applyPlacementOffset: boolean,
-    ) => {
+    (clientX: number, clientY: number, canvas: HTMLCanvasElement) => {
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
       const offsetX = (clientX - rect.left) * scaleX;
-      let offsetY = (clientY - rect.top) * scaleY;
-      if (applyPlacementOffset) offsetY += PLACEMENT_TAP_OFFSET_Y;
+      const offsetY = (clientY - rect.top) * scaleY;
       const relX = offsetX - originX;
       const relY = offsetY - originY;
       const _x = relX / tileWidth;
@@ -224,16 +221,24 @@ export default function IsoCanvas() {
     [drawImageTile],
   );
 
+  /** Map every cell covered by any building's footprint to its kind. */
+  const buildingCellMap = useCallback(() => {
+    const m = new Map<string, BuildingKind>();
+    for (const b of buildings) {
+      for (const c of footprintCells(b.kind, b.x, b.y)) {
+        m.set(`${c.x}:${c.y}`, b.kind);
+      }
+    }
+    return m;
+  }, [buildings]);
+
   const drawMap = useCallback(() => {
     const bg = bgRef.current?.getContext("2d");
     if (!bg) return;
     bg.clearRect(0, 0, canvasWidth, canvasHeight);
 
     if (gameMode === "play") {
-      const buildingByCell = new Map<string, BuildingKind>();
-      for (const b of buildings) {
-        buildingByCell.set(`${b.x}:${b.y}`, b.kind);
-      }
+      const cellMap = buildingCellMap();
       // Iterate cells in iso back-to-front order (smaller i+j drawn first).
       const cells: Array<{ i: number; j: number }> = [];
       for (let i = 0; i < gridSize; i++) {
@@ -244,9 +249,12 @@ export default function IsoCanvas() {
       cells.sort((a, b) => a.i + a.j - (b.i + b.j));
 
       for (const { i, j } of cells) {
-        const buildingKind = buildingByCell.get(`${i}:${j}`);
+        const buildingKind = cellMap.get(`${i}:${j}`);
         if (buildingKind) {
-          // Tile swap: building replaces editor tile in the same plane.
+          // Tile swap: building tile replaces editor tile per cell. For
+          // multi-cell buildings, the same building tile is drawn at
+          // each footprint cell so a 2×2 garden looks like 2×2 of the
+          // garden tile.
           drawBuildingAt(bg, i, j, buildingKind, 1);
         } else {
           drawImageTile(bg, i, j, map[i][j][0], map[i][j][1], map[i][j][2]);
@@ -272,8 +280,8 @@ export default function IsoCanvas() {
     drawImageTile,
     drawCharacterTile,
     drawBuildingAt,
+    buildingCellMap,
     gameMode,
-    buildings,
   ]);
 
   const getTileCoordinates = useCallback(() => {
@@ -391,37 +399,91 @@ export default function IsoCanvas() {
       if (x < 0 || x >= gridSize || y < 0 || y >= gridSize) return;
 
       if (gameMode === "play" && placementMode) {
-        const occupied = buildings.some((b) => b.x === x && b.y === y);
         const isDemolish = placementMode === "demolish";
-        const valid = isDemolish ? occupied : !occupied;
 
-        if (placementMode !== "demolish" && !occupied) {
-          drawBuildingAt(ctx, x, y, placementMode, 0.55);
+        if (isDemolish) {
+          const target = buildings.find((b) =>
+            footprintCells(b.kind, b.x, b.y).some(
+              (c) => c.x === x && c.y === y,
+            ),
+          );
+          const cells = target
+            ? footprintCells(target.kind, target.x, target.y)
+            : [{ x, y }];
+          for (const c of cells) {
+            ctx.save();
+            ctx.translate(
+              originX + (c.y - c.x) * (tileWidth / 2),
+              originY + (c.x + c.y) * (tileHeight / 2),
+            );
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(tileWidth / 2, tileHeight / 2);
+            ctx.lineTo(0, tileHeight);
+            ctx.lineTo(-tileWidth / 2, tileHeight / 2);
+            ctx.closePath();
+            ctx.fillStyle = target
+              ? "rgba(220,40,40,0.25)"
+              : "rgba(150,150,150,0.15)";
+            ctx.fill();
+            ctx.strokeStyle = target
+              ? "rgba(220,40,40,0.85)"
+              : "rgba(150,150,150,0.6)";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+          }
+          return;
         }
-        ctx.save();
-        ctx.translate(
-          originX + (y - x) * (tileWidth / 2),
-          originY + (x + y) * (tileHeight / 2),
+
+        const cells = footprintCells(placementMode, x, y);
+        const allInGrid = cells.every(
+          (c) => c.x >= 0 && c.x < gridSize && c.y >= 0 && c.y < gridSize,
         );
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(tileWidth / 2, tileHeight / 2);
-        ctx.lineTo(0, tileHeight);
-        ctx.lineTo(-tileWidth / 2, tileHeight / 2);
-        ctx.closePath();
-        ctx.strokeStyle = valid
-          ? "rgba(40,180,40,0.85)"
-          : "rgba(220,40,40,0.85)";
-        if (isDemolish && occupied) {
-          ctx.fillStyle = "rgba(220,40,40,0.25)";
-          ctx.fill();
-        } else if (!isDemolish && occupied) {
-          ctx.fillStyle = "rgba(220,40,40,0.18)";
-          ctx.fill();
+        const anyOccupied = cells.some((c) =>
+          buildings.some((b) =>
+            footprintCells(b.kind, b.x, b.y).some(
+              (bc) => bc.x === c.x && bc.y === c.y,
+            ),
+          ),
+        );
+        const valid = allInGrid && !anyOccupied;
+
+        // Render ghost tiles in iso back-to-front order so footprint
+        // overlap is sane.
+        const sortedCells = [...cells].sort(
+          (a, b) => a.x + a.y - (b.x + b.y),
+        );
+        if (valid) {
+          for (const c of sortedCells) {
+            drawBuildingAt(ctx, c.x, c.y, placementMode, 0.55);
+          }
         }
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.restore();
+
+        for (const c of cells) {
+          if (c.x < 0 || c.x >= gridSize || c.y < 0 || c.y >= gridSize) continue;
+          ctx.save();
+          ctx.translate(
+            originX + (c.y - c.x) * (tileWidth / 2),
+            originY + (c.x + c.y) * (tileHeight / 2),
+          );
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(tileWidth / 2, tileHeight / 2);
+          ctx.lineTo(0, tileHeight);
+          ctx.lineTo(-tileWidth / 2, tileHeight / 2);
+          ctx.closePath();
+          ctx.strokeStyle = valid
+            ? "rgba(40,180,40,0.85)"
+            : "rgba(220,40,40,0.85)";
+          if (!valid) {
+            ctx.fillStyle = "rgba(220,40,40,0.18)";
+            ctx.fill();
+          }
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.restore();
+        }
         return;
       }
 
@@ -466,16 +528,8 @@ export default function IsoCanvas() {
     [activeCharacterTool, activeTool, setCharacter, setTile],
   );
 
-  const placementApplyOffset =
-    gameMode === "play" && placementMode !== null;
-
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const pos = tilePosFromClient(
-      e.clientX,
-      e.clientY,
-      e.currentTarget,
-      placementApplyOffset && e.button !== 2,
-    );
+    const pos = tilePosFromClient(e.clientX, e.clientY, e.currentTarget);
     if (pos.x < 0 || pos.x >= gridSize || pos.y < 0 || pos.y >= gridSize) return;
 
     if (gameMode === "play") {
@@ -504,12 +558,7 @@ export default function IsoCanvas() {
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const cf = fgRef.current?.getContext("2d");
     if (!cf) return;
-    const pos = tilePosFromClient(
-      e.clientX,
-      e.clientY,
-      e.currentTarget,
-      placementApplyOffset,
-    );
+    const pos = tilePosFromClient(e.clientX, e.clientY, e.currentTarget);
 
     if (gameMode === "editor" && isPlacingRef.current) {
       if (pos.x >= 0 && pos.x < gridSize && pos.y >= 0 && pos.y < gridSize) {
@@ -557,12 +606,7 @@ export default function IsoCanvas() {
     const touch = e.touches[0];
     if (!touch) return;
     const canvas = e.currentTarget;
-    const pos = tilePosFromClient(
-      touch.clientX,
-      touch.clientY,
-      canvas,
-      placementApplyOffset,
-    );
+    const pos = tilePosFromClient(touch.clientX, touch.clientY, canvas);
     if (pos.x < 0 || pos.x >= gridSize || pos.y < 0 || pos.y >= gridSize) return;
 
     const cf = fgRef.current?.getContext("2d");
@@ -609,12 +653,7 @@ export default function IsoCanvas() {
     const touch = e.touches[0];
     if (!touch) return;
     const canvas = e.currentTarget;
-    const pos = tilePosFromClient(
-      touch.clientX,
-      touch.clientY,
-      canvas,
-      placementApplyOffset,
-    );
+    const pos = tilePosFromClient(touch.clientX, touch.clientY, canvas);
 
     const cf = fgRef.current?.getContext("2d");
     if (cf) drawHover(cf, pos.x, pos.y);

@@ -18,7 +18,11 @@ import {
   TICKS_PER_DAY,
   VICTORY_POPULATION,
 } from "@/lib/game/types";
-import { BUILDING_DEFS, BuildingKind } from "@/lib/game/buildings";
+import {
+  BUILDING_DEFS,
+  BuildingKind,
+  footprintCells,
+} from "@/lib/game/buildings";
 
 type PlacementMode = BuildingKind | "demolish" | null;
 
@@ -264,11 +268,14 @@ export const useGameStore = create<GameStore>()(
         if (!placement) return false;
 
         if (placement === "demolish") {
-          const before = state.buildings.length;
-          const nextBuildings = state.buildings.filter(
-            (b) => !(b.x === x && b.y === y),
+          // Find any building whose footprint covers (x, y) and remove it.
+          const target = state.buildings.find((b) =>
+            footprintCells(b.kind, b.x, b.y).some(
+              (c) => c.x === x && c.y === y,
+            ),
           );
-          if (nextBuildings.length === before) return false;
+          if (!target) return false;
+          const nextBuildings = state.buildings.filter((b) => b.id !== target.id);
           set({
             buildings: nextBuildings,
             housing: computeHousing(nextBuildings),
@@ -276,7 +283,15 @@ export const useGameStore = create<GameStore>()(
           return true;
         }
 
-        if (state.buildings.some((b) => b.x === x && b.y === y)) return false;
+        const cells = footprintCells(placement, x, y);
+        const occupied = cells.some((c) =>
+          state.buildings.some((b) =>
+            footprintCells(b.kind, b.x, b.y).some(
+              (bc) => bc.x === c.x && bc.y === c.y,
+            ),
+          ),
+        );
+        if (occupied) return false;
 
         const def = BUILDING_DEFS[placement];
         if (!hasResources(state.resources, def.cost)) return false;
@@ -299,10 +314,13 @@ export const useGameStore = create<GameStore>()(
 
       removeBuildingAt: (x, y) => {
         const state = get();
-        const nextBuildings = state.buildings.filter(
-          (b) => !(b.x === x && b.y === y),
+        const target = state.buildings.find((b) =>
+          footprintCells(b.kind, b.x, b.y).some(
+            (c) => c.x === x && c.y === y,
+          ),
         );
-        if (nextBuildings.length === state.buildings.length) return;
+        if (!target) return;
+        const nextBuildings = state.buildings.filter((b) => b.id !== target.id);
         set({
           buildings: nextBuildings,
           housing: computeHousing(nextBuildings),
