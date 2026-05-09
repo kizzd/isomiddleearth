@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMapStore } from "@/lib/store";
+import { useGameStore } from "@/lib/game/store";
 import { useShallow } from "zustand/react/shallow";
 import { SPRITE_TILE_H, SPRITE_TILE_W, TILE_GROUPS } from "@/lib/tiles";
 import {
@@ -14,6 +15,8 @@ import {
   getCharacterPath,
   isCharacterId,
 } from "@/lib/characters";
+import { BUILDING_DEFS, BuildingKind } from "@/lib/game/buildings";
+import type { Building } from "@/lib/game/types";
 
 export default function IsoCanvas() {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -47,6 +50,18 @@ export default function IsoCanvas() {
       location: state.location,
     })),
   );
+
+  const { gameMode, placementMode, buildings, placeBuilding, removeBuildingAt, setPlacementMode } =
+    useGameStore(
+      useShallow((s) => ({
+        gameMode: s.mode,
+        placementMode: s.placementMode,
+        buildings: s.buildings,
+        placeBuilding: s.placeBuilding,
+        removeBuildingAt: s.removeBuildingAt,
+        setPlacementMode: s.setPlacementMode,
+      })),
+    );
 
   const tileWidth = 128;
   const tileHeight = 64;
@@ -157,6 +172,75 @@ export default function IsoCanvas() {
     [originX, originY, tileWidth, tileHeight],
   );
 
+  const drawBuildingShape = useCallback(
+    (
+      ctx: CanvasRenderingContext2D,
+      x: number,
+      y: number,
+      kind: BuildingKind,
+      alpha: number,
+    ) => {
+      const def = BUILDING_DEFS[kind];
+      const cx = originX + (y - x) * (tileWidth / 2);
+      const cy = originY + (x + y) * (tileHeight / 2);
+      const w = tileWidth / 2;
+      const h = tileHeight / 2;
+      const blockH = 44;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      // left side
+      ctx.fillStyle = def.color;
+      ctx.beginPath();
+      ctx.moveTo(cx - w, cy + h);
+      ctx.lineTo(cx, cy + h * 2);
+      ctx.lineTo(cx, cy + h * 2 + blockH);
+      ctx.lineTo(cx - w, cy + h + blockH);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(0,0,0,0.25)";
+      ctx.fill();
+
+      // right side
+      ctx.fillStyle = def.color;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + h * 2);
+      ctx.lineTo(cx + w, cy + h);
+      ctx.lineTo(cx + w, cy + h + blockH);
+      ctx.lineTo(cx, cy + h * 2 + blockH);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(0,0,0,0.1)";
+      ctx.fill();
+
+      // top diamond
+      ctx.fillStyle = def.color;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + w, cy + h);
+      ctx.lineTo(cx, cy + h * 2);
+      ctx.lineTo(cx - w, cy + h);
+      ctx.closePath();
+      ctx.fill();
+
+      // outline
+      ctx.strokeStyle = "rgba(0,0,0,0.4)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // letter
+      ctx.fillStyle = "white";
+      ctx.font = "bold 18px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(def.short, cx, cy + h);
+
+      ctx.restore();
+    },
+    [originX, originY, tileWidth, tileHeight],
+  );
+
   const drawMap = useCallback(() => {
     const bg = bgRef.current?.getContext("2d");
     if (!bg) return;
@@ -167,7 +251,27 @@ export default function IsoCanvas() {
         drawCharacterTile(bg, i, j, characterMap[i][j]);
       }
     }
-  }, [map, characterMap, gridSize, canvasWidth, canvasHeight, drawImageTile, drawCharacterTile]);
+
+    if (gameMode === "play") {
+      const sorted: Building[] = [...buildings].sort(
+        (a, b) => a.x + a.y - (b.x + b.y),
+      );
+      for (const b of sorted) {
+        drawBuildingShape(bg, b.x, b.y, b.kind, 1);
+      }
+    }
+  }, [
+    map,
+    characterMap,
+    gridSize,
+    canvasWidth,
+    canvasHeight,
+    drawImageTile,
+    drawCharacterTile,
+    drawBuildingShape,
+    gameMode,
+    buildings,
+  ]);
 
   const getTileCoordinates = useCallback(() => {
     const coordKeys = new Set<string>();
@@ -277,24 +381,63 @@ export default function IsoCanvas() {
     drawMap();
   }, [map, gridSize, drawMap]);
 
-  const drawHover = (ctx: CanvasRenderingContext2D, x: number, y: number) => {
-    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-    if (x < 0 || x >= gridSize || y < 0 || y >= gridSize) return;
-    ctx.save();
-    ctx.translate(
-      originX + (y - x) * (tileWidth / 2),
-      originY + (x + y) * (tileHeight / 2),
-    );
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(tileWidth / 2, tileHeight / 2);
-    ctx.lineTo(0, tileHeight);
-    ctx.lineTo(-tileWidth / 2, tileHeight / 2);
-    ctx.closePath();
-    ctx.fillStyle = "rgba(0,0,0,0.15)";
-    ctx.fill();
-    ctx.restore();
-  };
+  const drawHover = useCallback(
+    (ctx: CanvasRenderingContext2D, x: number, y: number) => {
+      ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+      if (x < 0 || x >= gridSize || y < 0 || y >= gridSize) return;
+
+      if (gameMode === "play" && placementMode) {
+        const occupied = buildings.some((b) => b.x === x && b.y === y);
+        if (!occupied) {
+          drawBuildingShape(ctx, x, y, placementMode, 0.55);
+        }
+        ctx.save();
+        ctx.translate(
+          originX + (y - x) * (tileWidth / 2),
+          originY + (x + y) * (tileHeight / 2),
+        );
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(tileWidth / 2, tileHeight / 2);
+        ctx.lineTo(0, tileHeight);
+        ctx.lineTo(-tileWidth / 2, tileHeight / 2);
+        ctx.closePath();
+        ctx.strokeStyle = occupied ? "rgba(220,40,40,0.8)" : "rgba(40,180,40,0.8)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+
+      ctx.save();
+      ctx.translate(
+        originX + (y - x) * (tileWidth / 2),
+        originY + (x + y) * (tileHeight / 2),
+      );
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(tileWidth / 2, tileHeight / 2);
+      ctx.lineTo(0, tileHeight);
+      ctx.lineTo(-tileWidth / 2, tileHeight / 2);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(0,0,0,0.15)";
+      ctx.fill();
+      ctx.restore();
+    },
+    [
+      canvasWidth,
+      canvasHeight,
+      gridSize,
+      gameMode,
+      placementMode,
+      buildings,
+      drawBuildingShape,
+      originX,
+      originY,
+      tileWidth,
+      tileHeight,
+    ],
+  );
 
   const paintAt = useCallback(
     (x: number, y: number) => {
@@ -310,14 +453,29 @@ export default function IsoCanvas() {
 
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const pos = getPosition(e);
-    if (pos.x >= 0 && pos.x < gridSize && pos.y >= 0 && pos.y < gridSize) {
+    if (pos.x < 0 || pos.x >= gridSize || pos.y < 0 || pos.y >= gridSize) return;
+
+    if (gameMode === "play") {
       if (e.button === 2) {
-        clearAt(pos.x, pos.y);
-      } else {
-        paintAt(pos.x, pos.y);
+        if (placementMode) {
+          setPlacementMode(null);
+        } else {
+          removeBuildingAt(pos.x, pos.y);
+        }
+        return;
       }
-      isPlacingRef.current = true;
+      if (placementMode) {
+        placeBuilding(pos.x, pos.y);
+      }
+      return;
     }
+
+    if (e.button === 2) {
+      clearAt(pos.x, pos.y);
+    } else {
+      paintAt(pos.x, pos.y);
+    }
+    isPlacingRef.current = true;
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -325,7 +483,7 @@ export default function IsoCanvas() {
     if (!cf) return;
     const pos = getPosition(e);
 
-    if (isPlacingRef.current) {
+    if (gameMode === "editor" && isPlacingRef.current) {
       if (pos.x >= 0 && pos.x < gridSize && pos.y >= 0 && pos.y < gridSize) {
         if (e.buttons === 2) {
           clearAt(pos.x, pos.y);
