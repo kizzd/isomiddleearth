@@ -17,7 +17,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import GameModeSwitch from "@/components/game-mode-switch";
-import BuildPanel from "@/components/build-panel";
+import { useGameStore } from "@/lib/game/store";
 import {
   Dialog,
   DialogContent,
@@ -163,6 +163,8 @@ export default function Toolbar() {
     })),
   );
 
+  const gameMode = useGameStore((s) => s.mode);
+
   const [saveName] = useState("");
   const [pendingSize, setPendingSize] = useState(gridSize);
   const [jsonNotice, setJsonNotice] = useState<string | null>(null);
@@ -304,8 +306,9 @@ export default function Toolbar() {
       </Link>
 
       <GameModeSwitch />
-      <BuildPanel />
 
+      {gameMode === "editor" ? (
+        <>
       {/* Grid Size */}
       <Dialog>
         <DialogTrigger asChild>
@@ -557,6 +560,8 @@ export default function Toolbar() {
           </div>
         </DialogContent>
       </Dialog>
+        </>
+      ) : null}
 
       <div className="ml-auto hidden items-center gap-1 sm:flex">
         <Button variant="ghost" size="icon" asChild aria-label="X @strad3r">
