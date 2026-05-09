@@ -249,26 +249,10 @@ export default function IsoCanvas() {
     if (!bg) return;
     bg.clearRect(0, 0, canvasWidth, canvasHeight);
 
-    if (gameMode === "play") {
-      const cellMap = buildingCellMap();
-      // Iterate cells in iso back-to-front order (smaller i+j drawn first).
-      const cells: Array<{ i: number; j: number }> = [];
+    if (gameMode !== "play") {
+      // Editor mode: original row-major iteration.
       for (let i = 0; i < gridSize; i++) {
         for (let j = 0; j < gridSize; j++) {
-          cells.push({ i, j });
-        }
-      }
-      cells.sort((a, b) => a.i + a.j - (b.i + b.j));
-
-      for (const { i, j } of cells) {
-        const buildingKind = cellMap.get(`${i}:${j}`);
-        if (buildingKind) {
-          // Tile swap: building tile replaces editor tile per cell. For
-          // multi-cell buildings, the same building tile is drawn at
-          // each footprint cell so a 2×2 garden looks like 2×2 of the
-          // garden tile.
-          drawBuildingAt(bg, i, j, buildingKind, 1);
-        } else {
           drawImageTile(bg, i, j, map[i][j][0], map[i][j][1], map[i][j][2]);
           drawCharacterTile(bg, i, j, characterMap[i][j]);
         }
@@ -276,11 +260,66 @@ export default function IsoCanvas() {
       return;
     }
 
-    // Editor mode: original row-major iteration.
+    // Play mode: global iso z-sort across terrain + characters + every
+    // footprint cell of every game building. Each item gets a depth key
+    // and is painted strictly back-to-front so a 2×2 building behind a
+    // tall editor tree still composites correctly with neighbors.
+    type DrawItem =
+      | { kind: "tile"; i: number; j: number; depth: number }
+      | { kind: "character"; i: number; j: number; depth: number }
+      | {
+          kind: "building";
+          buildingKind: BuildingKind;
+          cx: number;
+          cy: number;
+          depth: number;
+        };
+
+    const cellMap = buildingCellMap();
+    const items: DrawItem[] = [];
+
     for (let i = 0; i < gridSize; i++) {
       for (let j = 0; j < gridSize; j++) {
-        drawImageTile(bg, i, j, map[i][j][0], map[i][j][1], map[i][j][2]);
-        drawCharacterTile(bg, i, j, characterMap[i][j]);
+        // Cells covered by a building skip terrain + character — building
+        // tile-swap replaces the underlying cell.
+        if (cellMap.has(`${i}:${j}`)) continue;
+        items.push({ kind: "tile", i, j, depth: (i + j) * 2 });
+        if (characterMap[i][j]) {
+          items.push({ kind: "character", i, j, depth: (i + j) * 2 + 1 });
+        }
+      }
+    }
+
+    for (const b of buildings) {
+      for (const c of footprintCells(b.kind, b.x, b.y)) {
+        // +1 keeps each building cell ordered after a same-row terrain
+        // tile in case a non-occupied neighbor sits exactly behind.
+        items.push({
+          kind: "building",
+          buildingKind: b.kind,
+          cx: c.x,
+          cy: c.y,
+          depth: (c.x + c.y) * 2 + 1,
+        });
+      }
+    }
+
+    items.sort((a, b) => a.depth - b.depth);
+
+    for (const item of items) {
+      if (item.kind === "tile") {
+        drawImageTile(
+          bg,
+          item.i,
+          item.j,
+          map[item.i][item.j][0],
+          map[item.i][item.j][1],
+          map[item.i][item.j][2],
+        );
+      } else if (item.kind === "character") {
+        drawCharacterTile(bg, item.i, item.j, characterMap[item.i][item.j]);
+      } else {
+        drawBuildingAt(bg, item.cx, item.cy, item.buildingKind, 1);
       }
     }
   }, [
@@ -293,6 +332,7 @@ export default function IsoCanvas() {
     drawCharacterTile,
     drawBuildingAt,
     buildingCellMap,
+    buildings,
     gameMode,
   ]);
 
