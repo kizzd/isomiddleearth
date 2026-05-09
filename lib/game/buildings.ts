@@ -6,9 +6,9 @@ export type BuildingKind =
   | "vegetable_garden"
   | "apple_orchard"
   | "pine_grove"
-  | "mill"
+  | "well"
   | "market"
-  | "inn";
+  | "campfire";
 
 export interface BuildingDef {
   kind: BuildingKind;
@@ -20,7 +20,7 @@ export interface BuildingDef {
   housing?: number;
   production?: Partial<Record<ResourceId, number>>;
   moodPerTick?: number;
-  /** Multiplicative bonus applied to nearby food production (Mill). */
+  /** Multiplicative bonus applied to all food production from other buildings. */
   foodMultiplier?: number;
 }
 
@@ -70,13 +70,14 @@ export const BUILDING_DEFS: Record<BuildingKind, BuildingDef> = {
     cost: { wood: 5 },
     production: { wood: 0.05 },
   },
-  mill: {
-    kind: "mill",
-    label: "Młyn Hobbitona",
-    description: "Premia +50% do produkcji jedzenia w całej osadzie.",
+  well: {
+    kind: "well",
+    label: "Studnia",
+    description:
+      "Czysta woda dla pól — premia ×1.5 do produkcji jedzenia w całej osadzie.",
     tileRow: 4,
-    tileCol: 1,
-    cost: { wood: 40, gold: 20 },
+    tileCol: 4,
+    cost: { wood: 20, gold: 15 },
     foodMultiplier: 1.5,
   },
   market: {
@@ -88,14 +89,15 @@ export const BUILDING_DEFS: Record<BuildingKind, BuildingDef> = {
     cost: { wood: 20 },
     production: { gold: 0.04 },
   },
-  inn: {
-    kind: "inn",
-    label: "Pod Zielonym Smokiem",
-    description: "Karczma — hobbici weseleją, zarabia parę monet.",
-    tileRow: 4,
-    tileCol: 0,
-    cost: { wood: 50, gold: 30 },
-    production: { gold: 0.08 },
+  campfire: {
+    kind: "campfire",
+    label: "Ognisko",
+    description:
+      "Hobbici zbierają się wieczorem — wzrost morale + parę monet od podróżnych.",
+    tileRow: 5,
+    tileCol: 5,
+    cost: { wood: 8 },
+    production: { gold: 0.02 },
     moodPerTick: 0.05,
   },
 };
