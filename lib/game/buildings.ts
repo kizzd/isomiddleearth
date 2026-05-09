@@ -92,12 +92,11 @@ export const BUILDING_DEFS: Record<BuildingKind, BuildingDef> = {
   market: {
     kind: "market",
     label: "Stragan",
-    description: "Hobbicki targ — 2×2 kafle, więcej kupców.",
+    description: "Hobbici handlują plonami — przynosi złoto.",
     tileRow: 4,
     tileCol: 2,
-    cost: { wood: 40, gold: 10 },
-    production: { gold: 0.1 },
-    footprint: { w: 2, h: 2 },
+    cost: { wood: 20 },
+    production: { gold: 0.04 },
   },
   campfire: {
     kind: "campfire",
